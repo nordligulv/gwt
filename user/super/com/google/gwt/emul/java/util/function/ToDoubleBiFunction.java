@@ -13,20 +13,17 @@
  * License for the specific language governing permissions and limitations under
  * the License.
  */
-package com.google.gwt.core.client.interop;
-
-import com.google.gwt.core.client.js.JsProperty;
-import com.google.gwt.core.client.js.JsType;
+package java.util.function;
 
 /**
- * An interface to test 'get' JsProperty getters.
+ * See <a href="https://docs.oracle.com/javase/8/docs/api/java/util/function/ToDoubleBiFunction.html">
+ * the official Java API doc</a> for details.
+ *
+ * @param <T> type of the first argument
+ * @param <U> type of the second argument
  */
-@JsType
-public interface JsTypeGetProperty {
+@FunctionalInterface
+public interface ToDoubleBiFunction<T, U> {
 
-  @JsProperty
-  int getX();
-
-  @JsProperty
-  void setX(int x);
+  double applyAsDouble(T t, U u);
 }

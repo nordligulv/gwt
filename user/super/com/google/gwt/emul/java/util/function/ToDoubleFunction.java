@@ -13,10 +13,16 @@
  * License for the specific language governing permissions and limitations under
  * the License.
  */
-package com.google.gwt.core.client.interop;
+package java.util.function;
 
-import com.google.gwt.core.client.js.JsType;
+/**
+ * See <a href="https://docs.oracle.com/javase/8/docs/api/java/util/function/ToDoubleFunction.html">
+ * the official Java API doc</a> for details.
+ *
+ * @param <T> type of the argument
+ */
+@FunctionalInterface
+public interface ToDoubleFunction<T> {
 
-@JsType(prototype = "testfoo.bar.MyJsInterface")
-interface MyNamespacedJsInterface {
+  double applyAsDouble(T value);
 }

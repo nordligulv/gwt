@@ -146,11 +146,8 @@ public class JavaClassHierarchySetupUtil {
 
     // Parentheses added to eliminate strict JS warning in Firefox.
     for (var part; parts.length && (part = parts.shift());) {
-        if (cur[part]) {
-            cur = cur[part];
-        } else {
-            cur = cur[part] = optCtor || {};
-        }
+        // assign the constructor to the last node (when parts is empty)
+        cur = cur[part] = cur[part] || !parts.length && optCtor || {};
     }
     return cur;
   }-*/;
@@ -209,5 +206,13 @@ public class JavaClassHierarchySetupUtil {
   @ForceInline
   static native JavaScriptObject uniqueId(String id) /*-{
     return jsinterop.closure.getUniqueId(id);
+  }-*/;
+
+  static native void defineProperties(
+      JavaScriptObject proto, JavaScriptObject propertyDefinition) /*-{
+    for (var key in propertyDefinition) {
+      propertyDefinition[key]['configurable'] = true;
+    }
+    Object.defineProperties(proto,  propertyDefinition);
   }-*/;
 }

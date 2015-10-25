@@ -1,5 +1,5 @@
 /*
- * Copyright 2013 Google Inc.
+ * Copyright 2015 Google Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
@@ -13,19 +13,16 @@
  * License for the specific language governing permissions and limitations under
  * the License.
  */
-package com.google.gwt.core.client.interop;
+package java.util.function;
 
-import com.google.gwt.core.client.js.JsProperty;
-import com.google.gwt.core.client.js.JsType;
+/**
+ * See <a href="https://docs.oracle.com/javase/8/docs/api/java/util/function/Supplier.html">
+ * the official Java API doc</a> for details.
+ *
+ * @param <T> type of the supplied value
+ */
+@FunctionalInterface
+public interface Supplier<T> {
 
-@JsType(prototype = "MyJsInterface")
-interface MyJsInterfaceWithPrototype {
-
-  @JsProperty
-  int getX();
-
-  @JsProperty
-  void setX(int a);
-
-  int sum(int bias);
+  T get();
 }

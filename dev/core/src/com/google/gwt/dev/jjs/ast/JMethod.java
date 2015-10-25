@@ -38,7 +38,7 @@ import java.util.Set;
 /**
  * A Java method implementation.
  */
-public class JMethod extends JNode implements JMember, CanBeAbstract, CanBeNative {
+public class JMethod extends JNode implements JMember, CanBeAbstract {
 
   /**
    * Indicates whether a method is a JsProperty accessor.
@@ -51,15 +51,28 @@ public class JMethod extends JNode implements JMember, CanBeAbstract, CanBeNativ
     /**
      * A getter property accessor. Usually in the form of getX()/isX().
      */
-    GETTER,
+    GETTER("get"),
     /**
      * A setter property accessor. Usually in the form of setX(x).
      */
-    SETTER,
+    SETTER("set"),
     /**
      * A property accessor but doesn't match setter/getter patterns.
      */
-    UNDEFINED,
+    UNDEFINED;
+
+    private String key;
+
+    JsPropertyAccessorType() {
+    }
+
+    JsPropertyAccessorType(String key) {
+      this.key = key;
+    }
+
+    public String getKey() {
+      return key;
+    }
   }
 
   public static final Comparator<JMethod> BY_SIGNATURE_COMPARATOR = new Comparator<JMethod>() {
@@ -610,12 +623,11 @@ public class JMethod extends JNode implements JMember, CanBeAbstract, CanBeNativ
     return isForwarding;
   }
 
-  @Override
-  public boolean isNative() {
+  public boolean isJsniMethod() {
     if (body == null) {
       return false;
     } else {
-      return body.isNative();
+      return body.isJsniMethodBody();
     }
   }
 
@@ -651,7 +663,7 @@ public class JMethod extends JNode implements JMember, CanBeAbstract, CanBeNativ
    */
   public void removeParam(int index) {
     params = Lists.remove(params, index);
-    if (isNative()) {
+    if (isJsniMethod()) {
       ((JsniMethodBody) getBody()).getFunc().getParameters().remove(index);
     }
   }

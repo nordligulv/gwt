@@ -13,28 +13,24 @@
  * License for the specific language governing permissions and limitations under
  * the License.
  */
-package com.google.gwt.core.client.interop;
+package java.util.function;
 
-import com.google.gwt.core.client.js.JsProperty;
-import com.google.gwt.core.client.js.JsType;
+import javaemul.internal.InternalPreconditions;
 
 /**
- * A class that represents an existing native type.
+ * See <a href="https://docs.oracle.com/javase/8/docs/api/java/util/function/LongConsumer.html">
+ * the official Java API doc</a> for details.
  */
-@JsType(prototype = "MyJsInterface")
-public class MyJsClassWithPrototype {
+@FunctionalInterface
+public interface LongConsumer {
 
-  public static int staticX;
+  void accept(long value);
 
-  public static native int answerToLife();
-
-  public int x;
-
-  @JsProperty
-  public native int getY();
-
-  @JsProperty
-  public native void setY(int x);
-
-  public native int sum(int bias);
+  default LongConsumer andThen(LongConsumer after) {
+    InternalPreconditions.checkCriticalNotNull(after);
+    return value -> {
+      accept(value);
+      after.accept(value);
+    };
+  }
 }

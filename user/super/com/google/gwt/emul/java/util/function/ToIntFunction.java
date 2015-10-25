@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Google Inc.
+ * Copyright 2015 Google Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
@@ -13,17 +13,16 @@
  * License for the specific language governing permissions and limitations under
  * the License.
  */
-package com.google.gwt.core.client.interop;
+package java.util.function;
 
-class MyClassExtendsJsPrototype extends MyJsClassWithPrototype {
+/**
+ * See <a href="https://docs.oracle.com/javase/8/docs/api/java/util/function/ToIntFunction.html">
+ * the official Java API doc</a> for details.
+ *
+ * @param <T> type of the argument
+ */
+@FunctionalInterface
+public interface ToIntFunction<T> {
 
-  MyClassExtendsJsPrototype() {
-    this.x = 42;
-    setY(52);
-  }
-
-  @Override
-  public int sum(int bias) {
-    return super.sum(bias) + 100;
-  }
+  int applyAsInt(T value);
 }

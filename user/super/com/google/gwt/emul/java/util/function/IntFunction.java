@@ -13,13 +13,16 @@
  * License for the specific language governing permissions and limitations under
  * the License.
  */
-package com.google.gwt.core.client.interop;
-
-import com.google.gwt.core.client.js.JsType;
+package java.util.function;
 
 /**
- * A test class marked with JsType but isn't referenced from any Java code except instanceof.
+ * See <a href="https://docs.oracle.com/javase/8/docs/api/java/util/function/IntFunction.html">
+ * the official Java API doc</a> for details.
+ *
+ * @param <R> type of the return value
  */
-@JsType(prototype = "MyJsInterface")
-public interface MyJsInterfaceWithPrototypeAndOnlyInstanceofReference {
+@FunctionalInterface
+public interface IntFunction<R> {
+
+  R apply(int value);
 }

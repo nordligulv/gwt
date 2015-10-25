@@ -64,6 +64,7 @@ import com.google.gwt.dev.jjs.ast.JLocal;
 import com.google.gwt.dev.jjs.ast.JLocalRef;
 import com.google.gwt.dev.jjs.ast.JMember;
 import com.google.gwt.dev.jjs.ast.JMethod;
+import com.google.gwt.dev.jjs.ast.JMethod.JsPropertyAccessorType;
 import com.google.gwt.dev.jjs.ast.JMethodBody;
 import com.google.gwt.dev.jjs.ast.JMethodCall;
 import com.google.gwt.dev.jjs.ast.JNameOf;
@@ -142,7 +143,6 @@ import com.google.gwt.dev.js.ast.JsPositionMarker.Type;
 import com.google.gwt.dev.js.ast.JsPostfixOperation;
 import com.google.gwt.dev.js.ast.JsPrefixOperation;
 import com.google.gwt.dev.js.ast.JsProgram;
-import com.google.gwt.dev.js.ast.JsPropertyInitializer;
 import com.google.gwt.dev.js.ast.JsReturn;
 import com.google.gwt.dev.js.ast.JsRootScope;
 import com.google.gwt.dev.js.ast.JsScope;
@@ -190,7 +190,6 @@ import java.util.TreeMap;
  * Creates a JavaScript AST from a <code>JProgram</code> node.
  */
 public class GenerateJavaScriptAST {
-
   /**
    * Finds the nodes that are targets of JNameOf so that a name is assigned to them.
    */
@@ -368,7 +367,7 @@ public class GenerateJavaScriptAST {
           } else if (x.isPackagePrivate()) {
             polyName = interfaceScope.declareName(mangleNameForPackagePrivatePoly(x), name);
           } else {
-            boolean isJsMethod = x.isOrOverridesJsMethod() && !x.isJsPropertyAccessor();
+            boolean isJsMethod = x.isOrOverridesJsMethod();
             polyName =
                 isJsMethod
                     ? interfaceScope.declareUnobfuscatableName(x.getJsName())
@@ -395,14 +394,14 @@ public class GenerateJavaScriptAST {
        * Only allocate a name for a function if it is native, not polymorphic,
        * is a JNameOf target or stack-stripping is disabled.
        */
-      if (!stripStack || !polymorphicNames.containsKey(x) || x.isNative()
+      if (!stripStack || !polymorphicNames.containsKey(x) || x.isJsniMethod()
           || nameOfTargets.contains(x)) {
         globalName = topScope.declareName(mangleName, name);
         names.put(x, globalName);
         recordSymbol(x, globalName);
       }
       JsFunction function;
-      if (x.isNative()) {
+      if (x.isJsniMethod()) {
         // set the global name of the JSNI peer
         JsniMethodBody body = (JsniMethodBody) x.getBody();
         function = body.getFunc();
@@ -520,9 +519,20 @@ public class GenerateJavaScriptAST {
 
   private class GenerateJavaScriptTransformer extends JTransformer<JsNode> {
 
-    public static final String GOOG_INHERITS = "goog.inherits";
     public static final String GOOG_ABSTRACT_METHOD = "goog.abstractMethod";
+    public static final String GOOG_INHERITS = "goog.inherits";
     public static final String GOOG_OBJECT_CREATE_SET = "goog.object.createSet";
+    public static final String JCHSU = "JavaClassHierarchySetupUtil";
+    public static final String JCHSU_COPY_OBJECT_PROPERTIES = JCHSU + ".copyObjectProperties";
+    public static final String JCHSU_DEFINE_CLASS = JCHSU + ".defineClass";
+    public static final String JCHSU_DEFINE_PROPERTIES = JCHSU + ".defineProperties";
+    public static final String JCHSU_EMPTY_METHOD = JCHSU + ".emptyMethod";
+    public static final String JCHSU_GET_CLASS_PROTOTYPE = JCHSU + ".getClassPrototype";
+    public static final String JCHSU_MAKE_LAMBDA_FUNCTION = JCHSU + ".makeLambdaFunction";
+    public static final String JCHSU_MODERNIZE_BROWSER = JCHSU + ".modernizeBrowser";
+    public static final String JCHSU_TYPE_MARKER_FN = JCHSU + ".typeMarkerFn";
+    public static final String OBJECT_TYPEMARKER = "Object.typeMarker";
+
     private final Set<JDeclaredType> alreadyRan = Sets.newLinkedHashSet();
 
     private final Map<String, Object> exportedMembersByExportName = new TreeMap<String, Object>();
@@ -796,7 +806,7 @@ public class GenerateJavaScriptAST {
       JsFunction function = transform(method.getBody());
       function.setInliningMode(method.getInliningMode());
 
-      if (!method.isNative()) {
+      if (!method.isJsniMethod()) {
         // Setup params on the generated function. A native method already got
         // its jsParams set when parsed from JSNI.
         transformInto(method.getParams(), function.getParameters());
@@ -946,7 +956,7 @@ public class GenerateJavaScriptAST {
         // TODO(rluble): Ideally we would want to construct the inheritance chain the JS way and
         // then we could do Type.prototype.polyname.call(this, ...). Currently prototypes do not
         // have global names instead they are stuck into the prototypesByTypeId array.
-        return constructInvocation(sourceInfo, "JavaClassHierarchySetupUtil.getClassPrototype",
+        return constructInvocation(sourceInfo, JCHSU_GET_CLASS_PROTOTYPE,
             (JsExpression) transform(getRuntimeTypeReference(type)));
       }
     }
@@ -958,20 +968,11 @@ public class GenerateJavaScriptAST {
 
     private JsExpression dispatchToInstanceMethod(
         JsExpression instance, JMethod method, List<JsExpression> args, SourceInfo sourceInfo) {
-      JsNameRef reference =
-          method.isJsPropertyAccessor()
-              ? new JsNameRef(sourceInfo, method.getJsName())
-              : polymorphicNames.get(method).makeRef(sourceInfo);
-      reference.setQualifier(instance);
+      JsNameRef reference = polymorphicNames.get(method).makeQualifiedRef(sourceInfo, instance);
 
-      switch (method.getJsPropertyAccessorType()) {
-        case SETTER:
-          return createAssignment(reference, args.get(0));
-        case GETTER:
-          return reference;
-        default:
-          return new JsInvocation(sourceInfo, reference, args);
-      }
+      JsPropertyAccessorType propertyAccessorType = method.getJsPropertyAccessorType();
+      return JsUtils
+          .createInvocationOrPropertyAccess(sourceInfo, propertyAccessorType, reference, args);
     }
 
     @Override
@@ -1012,6 +1013,7 @@ public class GenerateJavaScriptAST {
       if (newInstance.getClassType().isJsFunctionImplementation()) {
         return constructJsFunctionObject(sourceInfo, newInstance.getClassType(), ctorName, newExpr);
       }
+
       return newExpr;
     }
 
@@ -1023,8 +1025,7 @@ public class GenerateJavaScriptAST {
           ctorName, prototype, polymorphicNames.get(jsFunctionMethod));
 
       // makeLambdaFunction(Foo.prototype.functionMethodName, new Foo(...))
-      return constructInvocation(sourceInfo, "JavaClassHierarchySetupUtil.makeLambdaFunction",
-          funcNameRef, newExpr);
+      return constructInvocation(sourceInfo, JCHSU_MAKE_LAMBDA_FUNCTION, funcNameRef, newExpr);
     }
 
     private JMethod getJsFunctionMethod(JClassType type) {
@@ -1242,9 +1243,8 @@ public class GenerateJavaScriptAST {
 
       //  Perform necessary polyfills.
       addTypeDefinitionStatement(
-          program.getIndexedType("JavaClassHierarchySetupUtil"),
-          constructInvocation(
-              program.getSourceInfo(), "JavaClassHierarchySetupUtil.modernizeBrowser").makeStmt());
+          program.getIndexedType(JCHSU),
+          constructInvocation(program.getSourceInfo(), JCHSU_MODERNIZE_BROWSER).makeStmt());
 
       Set<JDeclaredType> alreadyProcessed =
           Sets.<JDeclaredType>newLinkedHashSet(program.immortalCodeGenTypes);
@@ -1601,8 +1601,7 @@ public class GenerateJavaScriptAST {
               if (jsName == null) {
                 // this can occur when JSNI references an instance method on a
                 // type that was never actually instantiated.
-                jsName =
-                    indexedFunctions.get("JavaClassHierarchySetupUtil.emptyMethod").getName();
+                jsName = indexedFunctions.get(JCHSU_EMPTY_METHOD).getName();
               }
               x.resolve(jsName);
             }
@@ -1658,14 +1657,13 @@ public class GenerateJavaScriptAST {
         return buildClosureStyleCastMapFromArrayLiteral(runtimeTypeIdLiterals, sourceInfo);
       }
 
-      JsObjectLiteral objectLiteral = new JsObjectLiteral(sourceInfo);
-      objectLiteral.setInternable();
-      List<JsPropertyInitializer> initializers = objectLiteral.getPropertyInitializers();
       JsNumberLiteral one = new JsNumberLiteral(sourceInfo, 1);
+      JsObjectLiteral.Builder objectLiteralBuilder = JsObjectLiteral.builder(sourceInfo)
+          .setInternable();
       for (JsExpression runtimeTypeIdLiteral : runtimeTypeIdLiterals) {
-        initializers.add(new JsPropertyInitializer(sourceInfo, runtimeTypeIdLiteral, one));
+        objectLiteralBuilder.add(runtimeTypeIdLiteral, one);
       }
-      return objectLiteral;
+      return objectLiteralBuilder.build();
     }
 
     private JsExpression buildClosureStyleCastMapFromArrayLiteral(
@@ -1989,44 +1987,33 @@ public class GenerateJavaScriptAST {
       }
     }
 
-    private JsExpression convertJavaLiteral(Object javaLiteral) {
-      if (javaLiteral instanceof JLiteral) {
-        return JjsUtils.translateLiteral((JLiteral) javaLiteral);
-      } else if (javaLiteral instanceof JExpression) {
-        return transform((JExpression) javaLiteral);
-      } else {
-        return JjsUtils.translateLiteral(program.getLiteral(javaLiteral));
-      }
-    }
-
-    private void generateCallToDefineClass(JClassType x,
-        List<JsNameRef> constructorArgs) {
-      JClassType superClass = x.getSuperClass();
+    private void generateCallToDefineClass(JClassType type, List<JsNameRef> constructorArgs) {
+      JClassType superClass = type.getSuperClass();
       JExpression superTypeId = (superClass == null) ? JNullLiteral.INSTANCE :
           getRuntimeTypeReference(superClass);
-      String jsPrototype = getSuperPrototype(x);
+      String jsPrototype = getSuperPrototype(type);
 
       List<JsExpression> defineClassArguments = Lists.newArrayList();
 
-      defineClassArguments.add(transform(getRuntimeTypeReference(x)));
+      defineClassArguments.add(transform(getRuntimeTypeReference(type)));
       defineClassArguments.add(jsPrototype == null ? transform(superTypeId) :
-          createJsQualifier(jsPrototype, x.getSourceInfo()));
-      defineClassArguments.add(generateCastableTypeMap(x));
+          createJsQualifier(jsPrototype, type.getSourceInfo()));
+      defineClassArguments.add(generateCastableTypeMap(type));
       defineClassArguments.addAll(constructorArgs);
 
       // JavaClassHierarchySetupUtil.defineClass(typeId, superTypeId, castableMap, constructors)
-      JsStatement defineClassStatement = constructInvocation(x.getSourceInfo(),
-          "JavaClassHierarchySetupUtil.defineClass", defineClassArguments).makeStmt();
-      addTypeDefinitionStatement(x, defineClassStatement);
+      JsStatement defineClassStatement = constructInvocation(type.getSourceInfo(),
+          JCHSU_DEFINE_CLASS, defineClassArguments).makeStmt();
+      addTypeDefinitionStatement(type, defineClassStatement);
 
       if (jsPrototype != null) {
         JsStatement statement =
-        constructInvocation(x.getSourceInfo(),
-            "JavaClassHierarchySetupUtil.copyObjectProperties",
-            getPrototypeQualifierViaLookup(program.getTypeJavaLangObject(), x.getSourceInfo()),
-            globalTemp.makeRef(x.getSourceInfo()))
+        constructInvocation(type.getSourceInfo(),
+            JCHSU_COPY_OBJECT_PROPERTIES,
+            getPrototypeQualifierViaLookup(program.getTypeJavaLangObject(), type.getSourceInfo()),
+            globalTemp.makeRef(type.getSourceInfo()))
             .makeStmt();
-        addTypeDefinitionStatement(x, statement);
+        addTypeDefinitionStatement(type, statement);
       }
     }
 
@@ -2155,7 +2142,7 @@ public class GenerateJavaScriptAST {
       if (jsPrototype != null) {
         JsStatement statement =
             constructInvocation(info,
-                "JavaClassHierarchySetupUtil.copyObjectProperties",
+                JCHSU_COPY_OBJECT_PROPERTIES,
                 getPrototypeQualifierOf(program.getTypeJavaLangObject(), info),
                 getPrototypeQualifierOf(type, info)).makeStmt();
         addTypeDefinitionStatement(type, statement);
@@ -2168,9 +2155,8 @@ public class GenerateJavaScriptAST {
     }
 
     private void setupTypeMarkerOnJavaLangObjectPrototype(JDeclaredType type) {
-      JsFunction typeMarkerMethod = indexedFunctions.get(
-          "JavaClassHierarchySetupUtil.typeMarkerFn");
-      generatePrototypeAssignmentForJavaField(type, "Object.typeMarker",
+      JsFunction typeMarkerMethod = indexedFunctions.get(JCHSU_TYPE_MARKER_FN);
+      generatePrototypeAssignmentForJavaField(type, OBJECT_TYPEMARKER,
           typeMarkerMethod.getName().makeRef(type.getSourceInfo()));
     }
 
@@ -2242,14 +2228,52 @@ public class GenerateJavaScriptAST {
       }
     }
 
-    /**
-     * Create a vtable assignment of the form _.polyname = rhs; and register the line as
-     * created for {@code method}.
-     */
-   private void generatePrototypeAssignment(JMethod method, JsName name, JsExpression rhs) {
+    private void generatePrototypeAssignment(JMethod method, JsName name, JsExpression rhs) {
+      generatePrototypeAssignment(method, name, rhs, method.getJsPropertyAccessorType());
+    }
+
+     /**
+      * Create a vtable assignment of the form _.polyname = rhs; and register the line as
+      * created for {@code method}.
+      */
+    private void generatePrototypeAssignment(JMethod method, JsName name, JsExpression rhs,
+        JsPropertyAccessorType accessorType) {
       SourceInfo sourceInfo = method.getSourceInfo();
-      JsNameRef lhs = name.makeQualifiedRef(sourceInfo, getPrototypeQualifierOf(method));
-      emitMethodImplementation(method, lhs, createAssignment(lhs, rhs).makeStmt());
+      JsNameRef prototypeQualifierOf = getPrototypeQualifierOf(method);
+      JsNameRef lhs = name.makeQualifiedRef(sourceInfo, prototypeQualifierOf);
+      switch (accessorType) {
+        case GETTER:
+        case SETTER:
+          emitPropertyImplementation(method, prototypeQualifierOf, name.makeRef(sourceInfo), rhs);
+          break;
+        default:
+          emitMethodImplementation(method, lhs, createAssignment(lhs, rhs).makeStmt());
+          break;
+      }
+    }
+
+    private void emitPropertyImplementation(JMethod method, JsNameRef prototype, JsNameRef name,
+        JsExpression methodDefinitionStatement) {
+      SourceInfo sourceInfo = method.getSourceInfo();
+
+      // We use Object.defineProperties instead of Object.defineProperty to make sure the
+      // property name appears as an identifier and not as a string.
+      // Some JS optimizers, e.g. the closure compiler, relies on this subtle difference for
+      // obfuscating property names.
+      JsNameRef definePropertyMethod =
+          indexedFunctions.get(JCHSU_DEFINE_PROPERTIES).getName().makeRef(sourceInfo);
+
+      JsObjectLiteral definePropertyLiteral =
+          JsObjectLiteral.builder(sourceInfo)
+               // {name: {get: function() { ..... }} or {set : function (v) {....}}}
+              .add(name, JsObjectLiteral.builder(sourceInfo)
+                      // {get: function() { ..... }} or {set : function (v) {....}}
+                  .add(method.getJsPropertyAccessorType().getKey(), methodDefinitionStatement)
+                  .build())
+              .build();
+
+      addMethodDefinitionStatement(method, new JsInvocation(sourceInfo, definePropertyMethod,
+          prototype, definePropertyLiteral).makeStmt());
     }
 
     private void emitMethodImplementation(JMethod method, JsNameRef functionNameRef,
@@ -2266,14 +2290,15 @@ public class GenerateJavaScriptAST {
       JsName polyName = polymorphicNames.get(method);
       JsExpression bridge = JsUtils.createBridge(method, polyName, topScope);
       // Aliases are never property accessors.
-      generatePrototypeAssignment(method, alias, bridge);
+      generatePrototypeAssignment(method, alias, bridge, JsPropertyAccessorType.NONE);
     }
 
     private JsExprStmt outputDisplayName(JsNameRef function, JMethod method) {
       JsNameRef displayName = new JsNameRef(function.getSourceInfo(), "displayName");
       displayName.setQualifier(function);
       String displayStringName = getDisplayName(method);
-      JsStringLiteral displayMethodName = new JsStringLiteral(function.getSourceInfo(), displayStringName);
+      JsStringLiteral displayMethodName =
+          new JsStringLiteral(function.getSourceInfo(), displayStringName);
       return createAssignment(displayName, displayMethodName).makeStmt();
     }
 
@@ -2306,12 +2331,11 @@ public class GenerateJavaScriptAST {
           continue;
         }
 
-        generatePrototypeDefinition(type, method, (JsExpression) transformMethod(method));
+        generatePrototypeDefinition(method, (JsExpression) transformMethod(method));
       }
     }
 
-    private void generatePrototypeDefinition(JDeclaredType x, JMethod method,
-        JsExpression functionDefinition) {
+    private void generatePrototypeDefinition(JMethod method, JsExpression functionDefinition) {
       if (functionDefinition != null) {
         generatePrototypeAssignment(method, polymorphicNames.get(method), functionDefinition);
       }
@@ -2419,7 +2443,7 @@ public class GenerateJavaScriptAST {
       // provides a better debug experience that does not step into already used clinits.
 
       JsFunction emptyFunctionFn = incremental ? objectConstructorFunction
-          : indexedFunctions.get("JavaClassHierarchySetupUtil.emptyMethod");
+          : indexedFunctions.get(JCHSU_EMPTY_METHOD);
       JsExpression assignment = createAssignment(clinitFunction.getName().makeRef(sourceInfo),
           emptyFunctionFn.getName().makeRef(sourceInfo));
       statements.add(0, assignment.makeStmt());
@@ -2615,7 +2639,7 @@ public class GenerateJavaScriptAST {
 
     @Override
     public void endVisit(JMethod x, Context ctx) {
-      if (x.isNative()) {
+      if (x.isJsniMethod()) {
         // These are methods whose bodies where not traversed by the Java method inliner.
         JsFunction function = jsFunctionsByJavaMethodBody.get(x.getBody());
         if (function != null && function.getBody() != null) {
@@ -2637,7 +2661,7 @@ public class GenerateJavaScriptAST {
     @Override
     public void endVisit(JMethodCall x, Context ctx) {
       JMethod target = x.getTarget();
-      if (target.isInliningAllowed() && (target.isNative()
+      if (target.isInliningAllowed() && (target.isJsniMethod()
           || program.getIndexedTypes().contains(target.getEnclosingType())
           || target.getInliningMode() == InliningMode.FORCE_INLINE)) {
         // These are either: 1) callsites to JSNI functions, in which case MethodInliner did not

@@ -13,22 +13,16 @@
  * License for the specific language governing permissions and limitations under
  * the License.
  */
-package com.google.gwt.core.client.interop;
+package java.util.function;
 
-import com.google.gwt.core.client.js.JsProperty;
-import com.google.gwt.core.client.js.JsType;
+/**
+ * See <a href="https://docs.oracle.com/javase/8/docs/api/java/util/function/DoubleFunction.html">
+ * the official Java API doc</a> for details.
+ *
+ * @param <R> type of the return value
+ */
+@FunctionalInterface
+public interface DoubleFunction<R> {
 
-@JsType
-interface MyJsInterfaceWithProtectedNames {
-
-  String var();
-
-  @JsProperty
-  String getNullField(); // Defined in object scope but shouldn't obfuscate
-
-  @JsProperty
-  String getImport();
-
-  @JsProperty
-  void setImport(String str);
+  R apply(double value);
 }

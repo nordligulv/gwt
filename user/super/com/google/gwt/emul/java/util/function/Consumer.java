@@ -13,26 +13,26 @@
  * License for the specific language governing permissions and limitations under
  * the License.
  */
-package com.google.gwt.core.client.interop;
+package java.util.function;
+
+import javaemul.internal.InternalPreconditions;
 
 /**
- * Implements MyJsInterface.
+ * See <a href="https://docs.oracle.com/javase/8/docs/api/java/util/function/Consumer.html">
+ * the official Java API doc</a> for details.
+ *
+ * @param <T> type of the argument
  */
-public class MyJsInterfaceWithPrototypeImpl implements MyJsInterfaceWithPrototype {
-  private int x;
+@FunctionalInterface
+public interface Consumer<T> {
 
-  @Override
-  public int getX() {
-    return x;
-  }
+  void accept(T t);
 
-  @Override
-  public void setX(int x) {
-    this.x = x;
-  }
-
-  @Override
-  public int sum(int bias) {
-    return bias;
+  default Consumer<T> andThen(Consumer<? super T> after) {
+    InternalPreconditions.checkCriticalNotNull(after);
+    return t -> {
+      accept(t);
+      after.accept(t);
+    };
   }
 }

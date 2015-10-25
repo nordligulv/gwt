@@ -13,20 +13,14 @@
  * License for the specific language governing permissions and limitations under
  * the License.
  */
-package com.google.gwt.core.client.interop;
-
-import com.google.gwt.core.client.js.JsProperty;
-import com.google.gwt.core.client.js.JsType;
+package java.util.function;
 
 /**
- * An interface to test 'is' JsProperty getters.
+ * See <a href="https://docs.oracle.com/javase/8/docs/api/java/util/function/LongToDoubleFunction.html">
+ * the official Java API doc</a> for details.
  */
-@JsType
-public interface JsTypeIsProperty {
+@FunctionalInterface
+public interface LongToDoubleFunction {
 
-  @JsProperty
-  boolean isX();
-
-  @JsProperty
-  void setX(boolean x);
+  double applyAsDouble(long value);
 }
