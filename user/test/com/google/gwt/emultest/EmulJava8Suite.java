@@ -42,6 +42,7 @@ import com.google.gwt.emultest.java8.util.SpliteratorsTest;
 import com.google.gwt.emultest.java8.util.StringJoinerTest;
 import com.google.gwt.emultest.java8.util.TreeMapTest;
 import com.google.gwt.emultest.java8.util.VectorTest;
+import com.google.gwt.emultest.java8.util.concurrent.CompletableFutureTest;
 import com.google.gwt.emultest.java8.util.stream.CollectorsTest;
 import com.google.gwt.emultest.java8.util.stream.DoubleStreamTest;
 import com.google.gwt.emultest.java8.util.stream.IntStreamTest;
@@ -92,6 +93,9 @@ public class EmulJava8Suite {
     suite.addTestSuite(DoubleSummaryStatisticsTest.class);
     suite.addTestSuite(IntSummaryStatisticsTest.class);
     suite.addTestSuite(LongSummaryStatisticsTest.class);
+
+    //-- java.util.concurrent
+    suite.addTestSuite(CompletableFutureTest.class);
 
     //-- java.util.stream
     suite.addTestSuite(CollectorsTest.class);
